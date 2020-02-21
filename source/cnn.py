@@ -3,30 +3,63 @@
 """
 @author: Vesper Huang
 """
+
 from __future__ import division, print_function, absolute_import
 
-import tensorflow as tf
 # Import MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
-mnist = input_data.read_data_sets("/tmp/data/", one_hot=False)
+mnist = input_data.read_data_sets("../tmp/data/", one_hot=False)
+
+import tensorflow as tf
+
+# Training Parameters
+learning_rate = 0.001
+num_steps = 2000
+batch_size = 128
+
+# Network Parameters
+num_input = 784 # MNIST data input (img shape: 28*28)
+num_classes = 10 # MNIST total classes (0-9 digits)
+dropout = 0.25 # Dropout, probability to drop a unit
 
 
+# Create the neural network
 def conv_net(x_dict, n_classes, dropout, reuse, is_training):
-    with tf.variable_scope("conv", reuse=reuse):
-        x = x_dict["images"]
+    # Define a scope for reusing the variables
+    with tf.variable_scope('ConvNet', reuse=reuse):
+        # TF Estimator input is a dict, in case of multiple inputs
+        x = x_dict['images']
+
+        # MNIST data input is a 1-D vector of 784 features (28*28 pixels)
+        # Reshape to match picture format [Height x Width x Channel]
+        # Tensor input become 4-D: [Batch Size, Height, Width, Channel]
         x = tf.reshape(x, shape=[-1, 28, 28, 1])
 
-        conv1 = tf.layers.conv2d(x, 32, 5, activation=tf.nn.relu)
-        pool1 = tf.layers.max_pooling2d(conv1, 2, 2)
-        conv2 = tf.layers.conv2d(pool1, 64, 3, activation=tf.nn.relu)
-        pool2 = tf.layers.max_pooling2d(conv2, 2, 2)
-        fc1 = tf.contrib.layers.flatten(pool2)
+        # Convolution Layer with 32 filters and a kernel size of 5
+        conv1 = tf.layers.conv2d(x, 32, 5, padding='same', activation=tf.nn.relu)
+        # Max Pooling (down-sampling) with strides of 2 and kernel size of 2
+        conv1 = tf.layers.max_pooling2d(conv1, 2, 2)
+
+        # Convolution Layer with 64 filters and a kernel size of 3
+        conv2 = tf.layers.conv2d(conv1, 64, 3, padding='same', activation=tf.nn.relu)
+        # Max Pooling (down-sampling) with strides of 2 and kernel size of 2
+        conv2 = tf.layers.max_pooling2d(conv2, 2, 2)
+
+        # Flatten the data to a 1-D vector for the fully connected layer
+        fc1 = tf.contrib.layers.flatten(conv2)
+
+        # Fully connected layer (in tf contrib folder for now)
         fc1 = tf.layers.dense(fc1, 1024)
-        fc1 = tf.nn.dropout(fc1, rate=dropout, training=is_training)
+        # Apply Dropout (if is_training is False, dropout is not applied)
+        fc1 = tf.layers.dropout(fc1, rate=dropout, training=is_training)
+
+        # Output layer, class prediction
         out = tf.layers.dense(fc1, n_classes)
+
     return out
 
 
+# Define the model function (following TF Estimator Template)
 def model_fn(features, labels, mode):
     # Build the neural network
     # Because Dropout have different behavior at training and prediction time, we
@@ -65,24 +98,22 @@ def model_fn(features, labels, mode):
 
     return estim_specs
 
+# Build the Estimator
+model = tf.estimator.Estimator(model_fn)
 
-if __name__ == "__main__":
-    # Build the Estimator
-    model = tf.estimator.Estimator(model_fn)
+# Define the input function for training
+input_fn = tf.estimator.inputs.numpy_input_fn(
+    x={'images': mnist.train.images}, y=mnist.train.labels,
+    batch_size=batch_size, num_epochs=None, shuffle=True)
+# Train the Model
+model.train(input_fn, steps=num_steps)
 
-    # Define the input function for training
-    input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={'images': mnist.train.images}, y=mnist.train.labels,
-        batch_size=batch_size, num_epochs=None, shuffle=True)
-    # Train the Model
-    model.train(input_fn, steps=num_steps)
+# Evaluate the Model
+# Define the input function for evaluating
+input_fn = tf.estimator.inputs.numpy_input_fn(
+    x={'images': mnist.test.images}, y=mnist.test.labels,
+    batch_size=batch_size, shuffle=False)
+# Use the Estimator 'evaluate' method
+e = model.evaluate(input_fn)
 
-    # Evaluate the Model
-    # Define the input function for evaluating
-    input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={'images': mnist.test.images}, y=mnist.test.labels,
-        batch_size=batch_size, shuffle=False)
-    # Use the Estimator 'evaluate' method
-    e = model.evaluate(input_fn)
-
-    print("Testing Accuracy:", e['accuracy'])
+print("Testing Accuracy:", e['accuracy'])
